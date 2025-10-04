@@ -1,0 +1,80 @@
+{
+  "info": {
+    "description": "База данных категорий оружия Pixel Gun 3D",
+    "version": "1.0",
+    "last_updated": "2025-10-04"
+  },
+  "categories": {
+    "1": {
+      "id": 1,
+      "name": "Основное",
+      "name_en": "Primary",
+      "description": "Основное оружие - автоматы, штурмовые винтовки",
+      "color": "#4CAF50",
+      "icon": "🔫",
+      "has_ammo": true,
+      "typical_ammo_range": [20, 50],
+      "examples": ["Assault rifles", "Machine guns", "Burst rifles"]
+    },
+    "2": {
+      "id": 2,
+      "name": "Пистолет",
+      "name_en": "Backup",
+      "description": "Запасное оружие - пистолеты",
+      "color": "#2196F3",
+      "icon": "🔫",
+      "has_ammo": true,
+      "typical_ammo_range": [10, 25],
+      "examples": ["Pistols", "Dual wielding", "Revolvers"]
+    },
+    "3": {
+      "id": 3,
+      "name": "Ближнего боя",
+      "name_en": "Melee",
+      "description": "Холодное оружие - мечи, ножи, дубинки",
+      "color": "#FF9800",
+      "icon": "⚔️",
+      "has_ammo": false,
+      "typical_ammo_range": [0, 0],
+      "examples": ["Swords", "Knives", "Hammers", "Scythes"]
+    },
+    "4": {
+      "id": 4,
+      "name": "Специальное",
+      "name_en": "Special",
+      "description": "Специальное оружие - гранатомёты, луки",
+      "color": "#9C27B0",
+      "icon": "💥",
+      "has_ammo": true,
+      "typical_ammo_range": [5, 20],
+      "examples": ["Grenade launchers", "Bows", "Special weapons"]
+    },
+    "5": {
+      "id": 5,
+      "name": "Снайперка",
+      "name_en": "Sniper",
+      "description": "Снайперские винтовки",
+      "color": "#00BCD4",
+      "icon": "🎯",
+      "has_ammo": true,
+      "typical_ammo_range": [5, 15],
+      "examples": ["Sniper rifles", "Railguns", "Crossbows"]
+    },
+    "6": {
+      "id": 6,
+      "name": "Тяжёлое",
+      "name_en": "Heavy",
+      "description": "Тяжёлое оружие - пулемёты, ракетницы",
+      "color": "#F44336",
+      "icon": "💣",
+      "has_ammo": true,
+      "typical_ammo_range": [30, 100],
+      "examples": ["Rocket launchers", "Heavy machine guns", "Flamethrowers"]
+    }
+  },
+  "notes": {
+    "usage": "Программа отслеживает только КАТЕГОРИЮ оружия (1-6), а не конкретную модель",
+    "ammo_tracking": "Патроны отслеживаются для всех категорий кроме 3 (холодное оружие)",
+    "user_action": "Пользователь вручную выбирает категорию при переключении оружия в игре"
+  }
+}

@@ -1,0 +1,90 @@
+weapon_slots:
+  slot_1:
+    x_percent: 33
+    y_percent: 87
+    width_percent: 6
+    height_percent: 6
+  slot_2:
+    x_percent: 14
+    y_percent: 92
+    width_percent: 8
+    height_percent: 6
+  slot_3:
+    x_percent: 23
+    y_percent: 92
+    width_percent: 8
+    height_percent: 6
+  slot_4:
+    x_percent: 32
+    y_percent: 92
+    width_percent: 8
+    height_percent: 6
+  slot_5:
+    x_percent: 41
+    y_percent: 92
+    width_percent: 8
+    height_percent: 6
+  slot_6:
+    x_percent: 50
+    y_percent: 92
+    width_percent: 8
+    height_percent: 6
+macros:
+  fast_combo:
+    name: Быстрый комбо
+    trigger_key: '4'
+    trigger_mouse: left
+    sequence:
+    - weapon: 1
+      condition: ammo > 0
+    - weapon: 2
+      condition: ammo > 5
+    - weapon: 5
+      condition: ammo > 0
+    - weapon: 4
+      condition: always
+    loop: true
+    delay_ms: 50
+  sniper_heavy:
+    name: Снайпер → Тяжёлое
+    trigger_key: '5'
+    trigger_mouse: left
+    sequence:
+    - weapon: 5
+      condition: ammo > 0
+    - weapon: 6
+      condition: ammo > 3
+    loop: true
+    delay_ms: 100
+  custom_1:
+    name: Кастомный макрос 1
+    trigger_key: x
+    trigger_mouse: left
+    sequence:
+    - weapon: 1
+      condition: ammo > 10
+    - weapon: 4
+      condition: ammo > 0
+    - weapon: 6
+      condition: always
+    loop: false
+    delay_ms: 75
+conditions:
+  rules:
+    ammo > 0: Есть хотя бы 1 патрон
+    ammo > X: Больше X патронов
+    ammo < X: Меньше X патронов
+    ammo_percent > X: Больше X% от максимума
+    always: Всегда переключаться
+    never: Никогда не переключаться
+settings:
+  enabled: true
+  global_delay_ms: 50
+  skip_empty: true
+  loop_by_default: true
+  show_notifications: true
+  sound_enabled: false
+hotkeys:
+  toggle_macros: F8
+  reload_config: F12
+  stop_macro: escape

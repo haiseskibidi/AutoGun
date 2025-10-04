@@ -1,0 +1,75 @@
+# Конфигурация AutoGun - PG3D Ammo Tracker & Macro System
+
+# Настройки чтения памяти
+memory_reading:
+  # Имя процесса игры (с пробелами!)
+  process_name: 'Pixel Gun 3D.exe'
+  
+  # Частота обновления (Hz)
+  update_rate: 60  # Можно 60-120 Hz для memory reading!
+  
+  # Автоматическое переподключение при потере связи
+  auto_reconnect: true
+  
+  # Оффсеты памяти (найдено через Cheat Engine!)
+  offsets:
+    # Путь: "GameAssembly.dll"+059A58A0 -> B8 -> 0 -> 38 -> 120 -> 20 -> патроны
+    weapon_slots_base: 0x059A58A0       # ✅ Базовый адрес (НАЙДЕНО!)
+    pointer_offsets: [0xB8, 0x0, 0x38, 0x120, 0x20]  # Цепочка оффсетов (ведёт к запасу)
+    slot_1_reserve: 0x00                # Оффсет для запасных патронов (48) - ПЕРВЫМ!
+    slot_1_clip: 0x04                   # Оффсет для патронов в обойме (12) - идёт ПОСЛЕ!
+    slot_offset: 0x10                   # ✅ Размер слота = 16 байт (НАЙДЕНО!)
+    active_weapon: null                 # Оффсет активного оружия (опционально)
+
+# Настройки макросов
+macros:
+  # Включить систему макросов
+  enabled: true
+  
+  # Пресеты макросов
+  presets:
+    Основной:
+      rules:
+        - from: 5  # Снайперка
+          to: 1    # -> Основное
+          check_ammo: true  # Проверять патроны
+        - from: 1  # Основное
+          to: 2    # -> Пистолет
+          check_ammo: true
+        - from: 6  # Тяжёлое
+          to: 1    # -> Основное
+          check_ammo: true
+
+# Настройки GUI
+gui:
+  # Прозрачность окна (0-100)
+  opacity: 90
+  
+  # Всегда поверх других окон
+  always_on_top: true
+  
+  # Тема: 'dark' или 'light'
+  theme: 'dark'
+  
+  # Показывать отладочную информацию
+  show_debug_info: false
+
+# Логирование
+logging:
+  level: 'INFO'  # DEBUG, INFO, WARNING, ERROR
+  save_to_file: true
+  log_file: 'logs/ammo_tracker.log'
+  
+# Горячие клавиши
+hotkeys:
+  # Вкл/Выкл отслеживание патронов
+  toggle_tracking: 'F9'
+  
+  # Вкл/Выкл макросы
+  toggle_macros: 'F8'
+  
+  # Открыть калибровку
+  calibrate: 'F11'
+  
+  # Перезагрузить конфигурацию
+  reload_config: 'F12'

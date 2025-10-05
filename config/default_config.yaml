@@ -20,6 +20,27 @@ memory_reading:
     slot_1_clip: 0x04                   # Оффсет для патронов в обойме (12) - идёт ПОСЛЕ!
     slot_offset: 0x10                   # ✅ Размер слота = 16 байт (НАЙДЕНО!)
     active_weapon: null                 # Оффсет активного оружия (опционально)
+    
+    # Триггер: currentTargetMoveC (из dump.cs - Player_move_c)
+    # Цепочка: Патроны → [B8] → [0] → [38] → +48 → myPlayerMoveC → +1380 → currentTargetMoveC
+    weapon_manager_static: 0x230        # ✅ Статический WeaponManager
+    player_movec_offset: 0x48           # ✅ myPlayerMoveC в WeaponManager
+    current_target_offset: 0x1380       # ✅ currentTargetMoveC (8-byte pointer)
+
+# Настройки триггер-бота
+trigger:
+  # Включить триггер-бот (по умолчанию выключен!)
+  enabled: false
+  
+  # Задержка реакции (миллисекунды)
+  reaction_delay_min: 50   # Минимальная задержка
+  reaction_delay_max: 150  # Максимальная задержка
+  
+  # Длительность нажатия (миллисекунды)
+  shot_duration: 50
+  
+  # Кулдаун между выстрелами (миллисекунды)
+  cooldown: 100
 
 # Настройки макросов
 macros:

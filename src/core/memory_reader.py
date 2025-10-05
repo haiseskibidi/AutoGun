@@ -4,6 +4,7 @@
 """
 
 import time
+import struct
 from typing import Optional, Dict, List, Tuple
 from loguru import logger
 
@@ -49,12 +50,20 @@ class MemoryReader:
             'slot_1_reserve': None,     # Оффсет для запаса
             'slot_offset': None,        # Размер структуры одного слота
             'active_weapon': None,      # Оффсет активного оружия (1-6)
+            # Новая система для currentTargetMoveC
+            'weapon_manager_static': 0x230,  # Статический WeaponManager (из dump.cs)
+            'player_movec_offset': 0x48,     # myPlayerMoveC в WeaponManager
+            'current_target_offset': 0x1380, # currentTargetMoveC (8-byte pointer)
         }
         
         # Кэш данных
         self.ammo_cache = {}
         self.active_weapon_cache = 1
         self.last_update = 0
+        
+        # Кэш для триггера (чтобы не спамить логи)
+        self.last_target_state = None  # True/False/None
+        self.last_target_ptr = None
         
         logger.info("MemoryReader инициализирован")
     
@@ -128,6 +137,25 @@ class MemoryReader:
             return self.pm.read_int(address)
         except Exception as e:
             logger.debug(f"Ошибка чтения адреса 0x{address:X}: {e}")
+            return None
+    
+    def read_float(self, address: int) -> Optional[float]:
+        """
+        Чтение float значения
+        
+        Args:
+            address: Адрес для чтения
+            
+        Returns:
+            Значение или None при ошибке
+        """
+        if not self.is_connected():
+            return None
+        
+        try:
+            return self.pm.read_float(address)
+        except Exception as e:
+            logger.debug(f"Ошибка чтения float адреса 0x{address:X}: {e}")
             return None
     
     def read_pointer(self, address: int) -> Optional[int]:
@@ -280,6 +308,139 @@ class MemoryReader:
     def get_cached_ammo(self, slot_id: int) -> Optional[Tuple[int, int]]:
         """Получение кэшированных патронов"""
         return self.ammo_cache.get(slot_id)
+    
+    def read_crosshair_on_enemy(self) -> bool:
+        """
+        Проверить наведён ли прицел на врага через currentTargetMoveC
+        
+        АЛЬТЕРНАТИВНЫЙ ПУТЬ (через патроны):
+        Патроны → WeaponManager → myPlayerMoveC → currentTargetMoveC
+        
+        Returns:
+            True если прицел на враге (указатель != 0), False иначе
+        """
+        if not self.is_connected():
+            logger.debug("[TARGET] ❌ Не подключено к игре")
+            return False
+        
+        try:
+            # ПЛАН B: Идём от патронов к WeaponManager!
+            # Патроны: GameAssembly+059A58A0 → [B8] → [0] → [38] → [120] → [20]
+            # Но [B8] → [0] → [38] это путь к WeaponManager!
+            
+            # ОТЛАДОЧНЫЙ ПУТЬ - проверяем каждый шаг!
+            if self.last_target_state is None:
+                logger.info(f"[TARGET] 🔍 === ПРОВЕРКА ПУТИ К WEAPONMANAGER ===")
+            
+            # Шаг 1: Базовый адрес патронов
+            base = self.module_base + self.offsets['weapon_slots_base']
+            if self.last_target_state is None:
+                logger.info(f"[TARGET] Шаг 1: GameAssembly + 0x{self.offsets['weapon_slots_base']:X} = 0x{base:X}")
+            
+            # Шаг 2: Читаем первый указатель
+            ptr1 = self.read_pointer(base)
+            if not ptr1:
+                return False
+            if self.last_target_state is None:
+                logger.info(f"[TARGET] Шаг 2: [0x{base:X}] = 0x{ptr1:X}")
+            
+            # Шаг 3: ptr1 + 0xB8
+            addr_b8 = ptr1 + 0xB8
+            ptr2 = self.read_pointer(addr_b8)
+            if not ptr2:
+                return False
+            if self.last_target_state is None:
+                logger.info(f"[TARGET] Шаг 3: [0x{ptr1:X} + 0xB8] = [0x{addr_b8:X}] = 0x{ptr2:X}")
+            
+            # Шаг 4: ptr2 + 0x0 (просто разыменование)
+            ptr3 = self.read_pointer(ptr2 + 0x0)
+            if not ptr3:
+                return False
+            if self.last_target_state is None:
+                logger.info(f"[TARGET] Шаг 4: [0x{ptr2:X} + 0x0] = 0x{ptr3:X}")
+            
+            # Шаг 5: ptr3 + 0x38 → МОЖЕТ ТУТ WeaponManager?
+            addr_38 = ptr3 + 0x38
+            ptr4 = self.read_pointer(addr_38)
+            if not ptr4:
+                return False
+            if self.last_target_state is None:
+                logger.info(f"[TARGET] Шаг 5: [0x{ptr3:X} + 0x38] = [0x{addr_38:X}] = 0x{ptr4:X}")
+            
+            # Попробуем ptr4 как WeaponManager
+            weapon_manager_ptr = ptr4
+            
+            if self.last_target_state is None:
+                logger.info(f"[TARGET] === ПРОВЕРКА WEAPONMANAGER ===")
+                # Читаем myPlayer (GameObject) на +0x40
+                my_player_go_addr = weapon_manager_ptr + 0x40
+                my_player_go_ptr = self.read_pointer(my_player_go_addr)
+                logger.info(f"[TARGET] myPlayer (GameObject) +0x40 = 0x{my_player_go_ptr:X}" if my_player_go_ptr else "[TARGET] myPlayer (GameObject) = NULL")
+            
+            # Шаг 6: Читаем myPlayerMoveC (+0x48 от WeaponManager)
+            my_player_addr = weapon_manager_ptr + self.offsets['player_movec_offset']
+            my_player_ptr = self.read_pointer(my_player_addr)
+            
+            if not my_player_ptr or my_player_ptr == 0:
+                if self.last_target_state is None:
+                    logger.warning(f"[TARGET] ⚠️ myPlayerMoveC (+0x48) = NULL!")
+                return False
+            
+            if self.last_target_state is None:
+                logger.info(f"[TARGET] myPlayerMoveC (+0x48) = 0x{my_player_ptr:X}")
+                logger.info(f"[TARGET] === КОНЕЦ ПРОВЕРКИ ПУТИ ===")
+            
+            # Шаг 7: Читаем currentTargetMoveC - это УКАЗАТЕЛЬ (8 байт) на +0x1380!
+            current_target_offset = 0x1380
+            current_target_addr = my_player_ptr + current_target_offset
+            
+            # Читаем 8-байтовый указатель
+            try:
+                current_target_ptr = self.read_pointer(current_target_addr)
+            except:
+                return False
+            
+            # РАСШИРЕННЫЙ ДАМП - покажем ТОЛЬКО NULL значения (кандидаты)!
+            if self.last_target_state is None:
+                logger.info(f"[TARGET] 🔍 === ПОИСК NULL УКАЗАТЕЛЕЙ (0x1000-0x1500) ===")
+                logger.info(f"[TARGET] myPlayerMoveC: 0x{my_player_ptr:X}")
+                logger.info(f"[TARGET] Показываю ТОЛЬКО NULL (они должны стать НЕ-NULL при наведении):")
+                
+                null_count = 0
+                # Показываем ТОЛЬКО NULL значения в РАСШИРЕННОМ диапазоне
+                for offset in range(0x1000, 0x1500, 8):
+                    try:
+                        addr = my_player_ptr + offset
+                        ptr_val = self.read_pointer(addr)
+                        
+                        if ptr_val == 0:
+                            logger.info(f"[TARGET]   +0x{offset:04X}: NULL")
+                            null_count += 1
+                    except:
+                        pass
+                
+                logger.info(f"[TARGET] Найдено {null_count} NULL указателей")
+                logger.info(f"[TARGET] === КОНЕЦ ПОИСКА ===")
+            
+            # Если указатель != NULL, значит прицел на враге!
+            is_on_enemy = (current_target_ptr is not None and current_target_ptr != 0)
+            
+            # ЛОГИРУЕМ ТОЛЬКО ПРИ ИЗМЕНЕНИИ СОСТОЯНИЯ!
+            if is_on_enemy != self.last_target_state or current_target_ptr != self.last_target_ptr:
+                if is_on_enemy:
+                    logger.info(f"[TARGET] 🎯 ✅ ЦЕЛЬ ЗАХВАЧЕНА! currentTargetMoveC = 0x{current_target_ptr:X}")
+                else:
+                    logger.info(f"[TARGET] ❌ ЦЕЛЬ ПОТЕРЯНА (currentTargetMoveC = NULL)")
+                
+                # Обновляем кэш
+                self.last_target_state = is_on_enemy
+                self.last_target_ptr = current_target_ptr
+            
+            return is_on_enemy
+        
+        except Exception as e:
+            logger.error(f"[TARGET] 💥 Ошибка чтения: {e}", exc_info=True)
+            return False
     
     def update_all(self) -> Dict:
         """

@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
     reconnect_requested = pyqtSignal()
     macros_toggled = pyqtSignal(bool)
     preset_changed = pyqtSignal(str)
+    trigger_toggled = pyqtSignal(bool)
     
     def __init__(self, config_manager):
         super().__init__()
@@ -295,6 +296,48 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(macros_frame)
         
+        # Панель триггер-бота
+        trigger_frame = QFrame()
+        trigger_frame.setStyleSheet("background-color: #252525; border-radius: 3px;")
+        trigger_layout = QHBoxLayout()
+        trigger_layout.setContentsMargins(10, 5, 10, 5)
+        trigger_frame.setLayout(trigger_layout)
+        
+        trigger_layout.addWidget(QLabel("Триггер-бот:"))
+        
+        # Переключатель вкл/выкл
+        self.trigger_enabled_checkbox = QCheckBox("Вкл")
+        # Устанавливаем дефолтное значение из конфига ДО подключения сигнала
+        default_trigger_enabled = self.config.get('trigger.enabled', False)
+        self.trigger_enabled_checkbox.setChecked(default_trigger_enabled)
+        self.trigger_enabled_checkbox.stateChanged.connect(self._on_trigger_toggled)
+        trigger_layout.addWidget(self.trigger_enabled_checkbox)
+        
+        # Статус триггера
+        self.trigger_status_label = QLabel("Выключено")
+        self.trigger_status_label.setStyleSheet("color: #888; font-size: 10px;")
+        trigger_layout.addWidget(self.trigger_status_label)
+        
+        # Предупреждение
+        warning_label = QLabel("⚠️ Используйте осторожно")
+        warning_label.setStyleSheet("color: #FF9800; font-size: 9px;")
+        trigger_layout.addWidget(warning_label)
+        
+        # Настройки триггера
+        trigger_layout.addWidget(QLabel("Задержка:"))
+        self.trigger_delay_spinbox = QSpinBox()
+        self.trigger_delay_spinbox.setRange(10, 300)
+        self.trigger_delay_spinbox.setValue(100)  # По умолчанию
+        self.trigger_delay_spinbox.setSuffix(" мс")
+        self.trigger_delay_spinbox.setFixedWidth(80)
+        self.trigger_delay_spinbox.setStyleSheet("padding: 3px; background-color: #2a2a2a; border: 1px solid #444; border-radius: 2px;")
+        self.trigger_delay_spinbox.setToolTip("Средняя задержка реакции")
+        trigger_layout.addWidget(self.trigger_delay_spinbox)
+        
+        trigger_layout.addStretch()
+        
+        layout.addWidget(trigger_frame)
+        
         # Лог
         log_label = QLabel("Логи:")
         log_label.setStyleSheet("font-size: 9px; color: #666;")
@@ -378,6 +421,22 @@ class MainWindow(QMainWindow):
             self.add_log(f"Пресет: {preset_name}")
             self._save_settings()
     
+    def _on_trigger_toggled(self, state):
+        """Переключение триггер-бота"""
+        enabled = (state == 2)  # Qt.CheckState.Checked
+        self.trigger_toggled.emit(enabled)
+        
+        if enabled:
+            self.trigger_status_label.setText("АКТИВЕН")
+            self.trigger_status_label.setStyleSheet("color: #f44336; font-size: 10px; font-weight: bold;")
+            self.add_log("🎯 Триггер-бот включен")
+        else:
+            self.trigger_status_label.setText("Выключено")
+            self.trigger_status_label.setStyleSheet("color: #888; font-size: 10px;")
+            self.add_log("⏸ Триггер-бот выключен")
+        
+        self._save_settings()
+    
     def reload_presets(self):
         """Перезагрузить список пресетов"""
         current = self.preset_combo.currentText()
@@ -397,14 +456,16 @@ class MainWindow(QMainWindow):
         """Сохранить настройки в user_settings"""
         fps = self.fps_spinbox.value()
         macros = self.macros_enabled_checkbox.isChecked()
+        trigger = self.trigger_enabled_checkbox.isChecked()
         preset = self.preset_combo.currentText()
         
         self.config.set('gui.last_update_rate', fps)
         self.config.set('gui.macros_enabled', macros)
+        self.config.set('gui.trigger_enabled', trigger)
         self.config.set('gui.last_preset', preset)
         self.config.save_user_config()
         
-        logger.debug(f"Сохранены настройки: FPS={fps}, Макросы={macros}, Пресет={preset}")
+        logger.debug(f"Сохранены настройки: FPS={fps}, Макросы={macros}, Триггер={trigger}, Пресет={preset}")
     
     def _load_settings(self):
         """Загрузить сохранённые настройки"""
@@ -446,6 +507,28 @@ class MainWindow(QMainWindow):
         
         # Эмитируем сигнал для применения настроек макросов
         self.macros_toggled.emit(macros_enabled)
+        
+        # Триггер-бот (загружаем последним!)
+        trigger_enabled = self.config.get('gui.trigger_enabled')
+        if trigger_enabled is None:
+            trigger_enabled = self.config.get('trigger.enabled', False)
+        
+        self.trigger_enabled_checkbox.blockSignals(True)
+        self.trigger_enabled_checkbox.setChecked(trigger_enabled)
+        self.trigger_enabled_checkbox.blockSignals(False)
+        
+        # Обновляем визуальный статус
+        if trigger_enabled:
+            self.trigger_status_label.setText("АКТИВЕН")
+            self.trigger_status_label.setStyleSheet("color: #f44336; font-size: 10px; font-weight: bold;")
+        else:
+            self.trigger_status_label.setText("Выключено")
+            self.trigger_status_label.setStyleSheet("color: #888; font-size: 10px;")
+        
+        logger.info(f"Загружено состояние триггера: {trigger_enabled}")
+        
+        # Эмитируем сигнал для применения настроек триггера
+        self.trigger_toggled.emit(trigger_enabled)
     
     def update_weapon_ammo(self, weapon_id: int, clip: int, reserve: int):
         if weapon_id in self.weapon_rows:

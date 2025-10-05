@@ -15,6 +15,7 @@ from src.utils.config_manager import ConfigManager
 from src.core.memory_reader import MemoryReader
 from src.core.weapon_category_detector import WeaponCategoryDetector
 from src.core.macro_engine import MacroEngine
+from src.core.trigger_bot import TriggerBot
 from src.gui.main_window import MainWindow
 
 
@@ -46,6 +47,7 @@ class AmmoTracker:
         self.memory_reader = MemoryReader(process_name)
         self.weapon_detector = WeaponCategoryDetector()
         self.macro_engine = MacroEngine(self.config)
+        self.trigger_bot = TriggerBot(self.memory_reader)
         
         # Загрузка оффсетов из конфига
         offsets = self.config.get('memory_reading.offsets', {})
@@ -85,6 +87,7 @@ class AmmoTracker:
         self.main_window.reconnect_requested.connect(self.reconnect_to_game)
         self.main_window.macros_toggled.connect(self.on_macros_toggled)
         self.main_window.preset_changed.connect(self.on_preset_changed)
+        self.main_window.trigger_toggled.connect(self.on_trigger_toggled)
         
         # Таймер обновления
         self.update_timer = QTimer()
@@ -167,6 +170,9 @@ class AmmoTracker:
             # Обновляем движок макросов
             self.macro_engine.update(self.all_ammo)
             
+            # Обновляем триггер-бот
+            self.trigger_bot.update()
+            
             # Обновление FPS
             self.fps_counter += 1
             current_time = time.time()
@@ -229,6 +235,25 @@ class AmmoTracker:
         """Обработчик смены пресета"""
         self.macro_engine.set_active_preset(preset_name)
         self.logger.info(f"Выбран пресет: {preset_name}")
+    
+    def on_trigger_toggled(self, enabled: bool):
+        """Обработчик вкл/выкл триггер-бота"""
+        if enabled:
+            # Применяем настройки задержки из GUI
+            delay = self.main_window.trigger_delay_spinbox.value()
+            min_delay = max(10, delay - 50)
+            max_delay = delay + 50
+            self.trigger_bot.set_reaction_delay(min_delay, max_delay)
+            
+            if self.trigger_bot.enable():
+                self.logger.info(f"Триггер-бот включен: {self.trigger_bot.get_status()}")
+                self.main_window.add_log("🎯 Триггер-бот активирован (зажатие)")
+            else:
+                self.main_window.add_log("❌ Не удалось найти окно игры")
+                self.main_window.trigger_enabled_checkbox.setChecked(False)
+        else:
+            self.trigger_bot.disable()
+            self.logger.info("Триггер-бот выключен")
     
     def run(self):
         """Запуск приложения"""

@@ -12,6 +12,8 @@ logs/
 
 config/user_settings.yaml
 
+PG3D-Scripts/
+
 *.tmp
 *.bak
 *.swp

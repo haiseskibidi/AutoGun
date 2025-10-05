@@ -6,7 +6,7 @@ pyyaml>=6.0
 loguru>=0.7.0
 
 keyboard>=0.13.5
-mouse>=0.7.1
+pywin32>=306
 
 opencv-python>=4.8.0
 

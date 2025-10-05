@@ -17,6 +17,7 @@ dump.cs
 dump/
 build/
 
+
 *.tmp
 *.bak
 *.swp

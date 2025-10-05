@@ -8,3 +8,7 @@ loguru>=0.7.0
 keyboard>=0.13.5
 mouse>=0.7.1
 
+opencv-python>=4.8.0
+
+# Для компиляции
+pyinstaller>=6.0.0

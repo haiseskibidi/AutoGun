@@ -20,16 +20,17 @@ def setup_logger(log_level: str = "INFO", log_to_file: bool = True, log_file: st
     # Удаляем стандартный обработчик
     logger.remove()
     
-    # Добавляем консольный вывод с цветами
-    logger.add(
-        sys.stderr,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
-        level=log_level,
-        colorize=True
-    )
+    # Добавляем консольный вывод с цветами (если есть stderr)
+    if sys.stderr is not None:
+        logger.add(
+            sys.stderr,
+            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
+            level=log_level,
+            colorize=True
+        )
     
     # Добавляем запись в файл
-    if log_to_file:
+    if log_to_file and log_file:
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         

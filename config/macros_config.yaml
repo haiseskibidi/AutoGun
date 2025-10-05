@@ -25,7 +25,7 @@ weapon_slots:
     width_percent: 8
     height_percent: 6
   slot_6:
-    x_percent: 50
+    x_percent: 500
     y_percent: 92
     width_percent: 8
     height_percent: 6

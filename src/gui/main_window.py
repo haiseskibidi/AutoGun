@@ -249,7 +249,9 @@ class MainWindow(QMainWindow):
         buttons_layout.addWidget(QLabel("FPS:"))
         self.fps_spinbox = QSpinBox()
         self.fps_spinbox.setRange(10, 120)
-        self.fps_spinbox.setValue(self.config.get('memory_reading.update_rate', 60))
+        # Берём из gui.last_update_rate или memory_reading.update_rate
+        default_fps = self.config.get('gui.last_update_rate') or self.config.get('memory_reading.update_rate', 120)
+        self.fps_spinbox.setValue(default_fps)
         self.fps_spinbox.setFixedWidth(60)
         self.fps_spinbox.setStyleSheet("padding: 3px; background-color: #2a2a2a; border: 1px solid #444; border-radius: 2px;")
         self.fps_spinbox.valueChanged.connect(lambda: self._save_settings())
@@ -272,6 +274,8 @@ class MainWindow(QMainWindow):
         
         # Переключатель вкл/выкл
         self.macros_enabled_checkbox = QCheckBox("Вкл")
+        default_macros_enabled = self.config.get('macros.enabled', True)
+        self.macros_enabled_checkbox.setChecked(default_macros_enabled)
         self.macros_enabled_checkbox.stateChanged.connect(self._on_macros_toggled)
         macros_layout.addWidget(self.macros_enabled_checkbox)
         
@@ -292,13 +296,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(macros_frame)
         
         # Лог
-        log_label = QLabel("Лог:")
+        log_label = QLabel("Логи:")
         log_label.setStyleSheet("font-size: 9px; color: #666;")
         layout.addWidget(log_label)
         
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(60)
+        self.log_text.setMinimumHeight(60)  # Минимальная высота
         self.log_text.setStyleSheet("""
             QTextEdit {
                 background-color: #1a1a1a;
@@ -310,14 +314,14 @@ class MainWindow(QMainWindow):
                 color: #888;
             }
         """)
-        layout.addWidget(self.log_text)
+        layout.addWidget(self.log_text, 1)  # stretch factor = 1 (будет растягиваться)
         
         # Тема
         self.setStyleSheet("""
-            QMainWindow, QWidget {
-                background-color: #1e1e1e;
-                color: #ffffff;
-            }
+                QMainWindow, QWidget {
+                    background-color: #1e1e1e;
+                    color: #ffffff;
+                }
         """)
     
     def _on_start(self):
@@ -422,12 +426,26 @@ class MainWindow(QMainWindow):
                 self.preset_combo.blockSignals(False)
                 logger.info(f"Загружен пресет: {last_preset}")
         
-        # Макросы (загружаем последними!)
-        macros_enabled = self.config.get('gui.macros_enabled', False)
+        macros_enabled = self.config.get('gui.macros_enabled')
+        if macros_enabled is None:
+            macros_enabled = self.config.get('macros.enabled', True)
+        
         self.macros_enabled_checkbox.blockSignals(True)  # Блокируем сигналы
         self.macros_enabled_checkbox.setChecked(macros_enabled)
         self.macros_enabled_checkbox.blockSignals(False)
+        
+        # Обновляем визуальный статус
+        if macros_enabled:
+            self.macros_status_label.setText("Включено")
+            self.macros_status_label.setStyleSheet("color: #4CAF50; font-size: 10px;")
+        else:
+            self.macros_status_label.setText("Выключено")
+            self.macros_status_label.setStyleSheet("color: #888; font-size: 10px;")
+        
         logger.info(f"Загружено состояние макросов: {macros_enabled}")
+        
+        # Эмитируем сигнал для применения настроек макросов
+        self.macros_toggled.emit(macros_enabled)
     
     def update_weapon_ammo(self, weapon_id: int, clip: int, reserve: int):
         if weapon_id in self.weapon_rows:

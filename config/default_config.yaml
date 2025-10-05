@@ -6,7 +6,7 @@ memory_reading:
   process_name: 'Pixel Gun 3D.exe'
   
   # Частота обновления (Hz)
-  update_rate: 60  # Можно 60-120 Hz для memory reading!
+  update_rate: 120  # Можно 60-120 Hz для memory reading!
   
   # Автоматическое переподключение при потере связи
   auto_reconnect: true
@@ -33,12 +33,15 @@ macros:
         - from: 5  # Снайперка
           to: 1    # -> Основное
           check_ammo: true  # Проверять патроны
+          repeat_count: 1  # Количество повторений
         - from: 1  # Основное
           to: 2    # -> Пистолет
           check_ammo: true
+          repeat_count: 1
         - from: 6  # Тяжёлое
           to: 1    # -> Основное
           check_ammo: true
+          repeat_count: 1
 
 # Настройки GUI
 gui:

@@ -27,6 +27,10 @@ class MacroEngine:
         self.last_ammo = {}
         self.last_weapon_id = 1
         
+        # Счётчики повторений для чередования правил
+        # Формат: {weapon_id: {'current_rule_idx': 0, 'counter': 0}}
+        self.rule_rotation = {}
+        
         # Координаты слотов оружия для клика
         self.weapon_keys = {
             1: '1',
@@ -53,6 +57,8 @@ class MacroEngine:
         """
         if preset_name in self.presets:
             self.current_preset = preset_name
+            # Сбросить счётчики при смене пресета
+            self.rule_rotation = {}
             logger.info(f"Активный пресет: {preset_name}")
         else:
             logger.warning(f"Пресет '{preset_name}' не найден")
@@ -156,20 +162,46 @@ class MacroEngine:
         # Получаем правила текущего пресета
         rules = self.presets[self.current_preset].get('rules', [])
         
-        # Ищем подходящее правило
-        for rule in rules:
-            if rule['from'] == from_weapon:
-                to_weapon = rule['to']
-                check_ammo = rule.get('check_ammo', True)
-                
-                # Проверяем патроны если нужно
-                if check_ammo and not self._has_ammo(to_weapon):
-                    logger.debug(f"Свап отменён: у оружия {to_weapon} нет патронов")
-                    continue
-                
-                logger.info(f"Свап: {from_weapon} → {to_weapon}")
-                self._switch_weapon(to_weapon)
-                break
+        # Фильтруем правила для текущего оружия
+        matching_rules = [rule for rule in rules if rule['from'] == from_weapon]
+        
+        if not matching_rules:
+            return
+        
+        # Инициализация счётчика для оружия если нужно
+        if from_weapon not in self.rule_rotation:
+            self.rule_rotation[from_weapon] = {
+                'current_rule_idx': 0,
+                'counter': 0
+            }
+        
+        rotation = self.rule_rotation[from_weapon]
+        
+        # Получаем текущее правило для чередования
+        current_rule = matching_rules[rotation['current_rule_idx']]
+        to_weapon = current_rule['to']
+        check_ammo = current_rule.get('check_ammo', True)
+        repeat_count = current_rule.get('repeat_count', 1)
+        
+        # Проверяем патроны если нужно
+        if check_ammo and not self._has_ammo(to_weapon):
+            logger.debug(f"Свап отменён: у оружия {to_weapon} нет патронов")
+            # Пропускаем это правило и переходим к следующему
+            rotation['counter'] = 0
+            rotation['current_rule_idx'] = (rotation['current_rule_idx'] + 1) % len(matching_rules)
+            return
+        
+        # Выполняем свап
+        logger.info(f"Свап: {from_weapon} → {to_weapon} (правило {rotation['current_rule_idx'] + 1}/{len(matching_rules)}, выстрел {rotation['counter'] + 1}/{repeat_count})")
+        self._switch_weapon(to_weapon)
+        
+        # Увеличиваем счётчик
+        rotation['counter'] += 1
+        
+        # Если достигли лимита повторений, переключаемся на следующее правило
+        if rotation['counter'] >= repeat_count:
+            rotation['counter'] = 0
+            rotation['current_rule_idx'] = (rotation['current_rule_idx'] + 1) % len(matching_rules)
     
     def _has_ammo(self, weapon_id: int) -> bool:
         """
@@ -200,13 +232,14 @@ class MacroEngine:
             return
         
         try:
-            # Нажимаем клавишу оружия
+            # Нажимаем клавишу оружия быстрым методом
             key = self.weapon_keys[weapon_id]
-            keyboard.press_and_release(key)
+            
+            # Используем send вместо press_and_release для мгновенной отправки
+            keyboard.send(key)
             logger.debug(f"Нажата клавиша: {key}")
             
-            # Небольшая задержка
-            time.sleep(0.05)
+            # Задержка убрана чтобы не блокировать управление
             
         except Exception as e:
             logger.error(f"Ошибка переключения оружия: {e}")

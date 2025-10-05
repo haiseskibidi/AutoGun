@@ -60,11 +60,21 @@ class SwapRule(QFrame):
         layout.addWidget(self.to_weapon)
         
         # Галочка: только если есть патроны
-        from PyQt6.QtWidgets import QCheckBox
+        from PyQt6.QtWidgets import QCheckBox, QSpinBox
         self.check_ammo = QCheckBox("Если есть патроны")
         self.check_ammo.setChecked(True)
         self.check_ammo.setStyleSheet("color: #888; font-size: 10px;")
         layout.addWidget(self.check_ammo)
+        
+        # Количество повторений
+        layout.addWidget(QLabel("Раз:"))
+        self.repeat_count = QSpinBox()
+        self.repeat_count.setRange(1, 99)
+        self.repeat_count.setValue(1)
+        self.repeat_count.setFixedWidth(50)
+        self.repeat_count.setStyleSheet("padding: 3px; background-color: #1e1e1e; border: 1px solid #444; border-radius: 2px;")
+        self.repeat_count.setToolTip("Сколько раз правило сработает перед переключением на следующее")
+        layout.addWidget(self.repeat_count)
         
         # Кнопка удалить
         delete_btn = QPushButton("✖")
@@ -87,6 +97,7 @@ class SwapRule(QFrame):
             self.from_weapon.setCurrentIndex(rule_data['from'] - 1)
             self.to_weapon.setCurrentIndex(rule_data['to'] - 1)
             self.check_ammo.setChecked(rule_data.get('check_ammo', True))
+            self.repeat_count.setValue(rule_data.get('repeat_count', 1))
     
     def _on_delete_clicked(self):
         if self.on_delete:
@@ -97,7 +108,8 @@ class SwapRule(QFrame):
         return {
             'from': self.from_weapon.currentIndex() + 1,
             'to': self.to_weapon.currentIndex() + 1,
-            'check_ammo': self.check_ammo.isChecked()
+            'check_ammo': self.check_ammo.isChecked(),
+            'repeat_count': self.repeat_count.value()
         }
 
 

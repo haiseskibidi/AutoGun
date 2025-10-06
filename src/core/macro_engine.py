@@ -181,19 +181,33 @@ class MacroEngine:
         current_rule = matching_rules[rotation['current_rule_idx']]
         to_weapon = current_rule['to']
         check_ammo = current_rule.get('check_ammo', True)
+        quick_switch = current_rule.get('quick_switch', False)
+        fallback_to = current_rule.get('fallback_to', 0)  # 0 = нет fallback
         repeat_count = current_rule.get('repeat_count', 1)
         
         # Проверяем патроны если нужно
         if check_ammo and not self._has_ammo(to_weapon):
-            logger.debug(f"Свап отменён: у оружия {to_weapon} нет патронов")
-            # Пропускаем это правило и переходим к следующему
-            rotation['counter'] = 0
-            rotation['current_rule_idx'] = (rotation['current_rule_idx'] + 1) % len(matching_rules)
-            return
+            # Если есть fallback оружие - используем его
+            if fallback_to > 0:
+                logger.info(f"У оружия {to_weapon} нет патронов → fallback на {fallback_to}")
+                to_weapon = fallback_to
+                # Для fallback тоже проверяем патроны
+                if not self._has_ammo(to_weapon):
+                    logger.debug(f"Свап отменён: у fallback оружия {to_weapon} тоже нет патронов")
+                    rotation['counter'] = 0
+                    rotation['current_rule_idx'] = (rotation['current_rule_idx'] + 1) % len(matching_rules)
+                    return
+            else:
+                # Нет fallback - пропускаем правило
+                logger.debug(f"Свап отменён: у оружия {to_weapon} нет патронов (fallback не задан)")
+                rotation['counter'] = 0
+                rotation['current_rule_idx'] = (rotation['current_rule_idx'] + 1) % len(matching_rules)
+                return
         
         # Выполняем свап
-        logger.info(f"Свап: {from_weapon} → {to_weapon} (правило {rotation['current_rule_idx'] + 1}/{len(matching_rules)}, выстрел {rotation['counter'] + 1}/{repeat_count})")
-        self._switch_weapon(to_weapon)
+        qs_marker = "🔪" if quick_switch else ""
+        logger.info(f"Свап: {from_weapon} → {to_weapon} {qs_marker}(правило {rotation['current_rule_idx'] + 1}/{len(matching_rules)}, выстрел {rotation['counter'] + 1}/{repeat_count})")
+        self._switch_weapon(to_weapon, use_quick_switch=quick_switch)
         
         # Увеличиваем счётчик
         rotation['counter'] += 1
@@ -220,26 +234,39 @@ class MacroEngine:
         # Проверяем ТОЛЬКО обойму (не запас!)
         return clip > 0
     
-    def _switch_weapon(self, weapon_id: int):
+    def _switch_weapon(self, weapon_id: int, use_quick_switch: bool = False):
         """
-        Переключить оружие
+        Переключить оружие (с quick switch если указано в правиле)
         
         Args:
             weapon_id: ID оружия (1-6)
+            use_quick_switch: Использовать quick switch для этого свапа
         """
         if weapon_id not in self.weapon_keys:
             logger.warning(f"Некорректный ID оружия: {weapon_id}")
             return
         
         try:
-            # Нажимаем клавишу оружия быстрым методом
-            key = self.weapon_keys[weapon_id]
+            # Читаем глобальные настройки quick switch из конфига
+            # (дефолтные значения берутся из default_config.yaml)
+            knife_slot = self.config.get('macros.knife_slot')
+            delay_ms = self.config.get('macros.quick_switch_delay')
             
-            # Используем send вместо press_and_release для мгновенной отправки
+            # Quick Switch: нож → целевое оружие (только если включено для этого правила)
+            if use_quick_switch and weapon_id != knife_slot:
+                # Шаг 1: Переключаемся на нож
+                knife_key = self.weapon_keys.get(knife_slot)
+                if knife_key:
+                    keyboard.send(knife_key)
+                    logger.debug(f"🔪 Quick switch: нож ({knife_slot})")
+                    
+                    # Задержка на ноже (отменяет анимацию)
+                    time.sleep(delay_ms / 1000.0)
+            
+            # Шаг 2: Переключаемся на целевое оружие
+            key = self.weapon_keys[weapon_id]
             keyboard.send(key)
             logger.debug(f"Нажата клавиша: {key}")
-            
-            # Задержка убрана чтобы не блокировать управление
             
         except Exception as e:
             logger.error(f"Ошибка переключения оружия: {e}")

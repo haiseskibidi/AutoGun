@@ -4,7 +4,7 @@
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QListWidget, QComboBox, QLineEdit, QGroupBox,
-                             QMessageBox, QListWidgetItem, QWidget, QFrame)
+                             QMessageBox, QListWidgetItem, QWidget, QFrame, QCheckBox, QSpinBox)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from loguru import logger
@@ -60,11 +60,38 @@ class SwapRule(QFrame):
         layout.addWidget(self.to_weapon)
         
         # Галочка: только если есть патроны
-        from PyQt6.QtWidgets import QCheckBox, QSpinBox
         self.check_ammo = QCheckBox("Если есть патроны")
         self.check_ammo.setChecked(True)
         self.check_ammo.setStyleSheet("color: #888; font-size: 10px;")
+        self.check_ammo.toggled.connect(self._on_check_ammo_toggled)
         layout.addWidget(self.check_ammo)
+        
+        # Fallback оружие (показывается только если check_ammo включено)
+        self.fallback_label = QLabel("→ иначе:")
+        self.fallback_label.setStyleSheet("color: #888; font-size: 9px;")
+        layout.addWidget(self.fallback_label)
+        
+        self.fallback_weapon = QComboBox()
+        self.fallback_weapon.addItems([
+            "—",  # Нет fallback
+            "1. Основное",
+            "2. Пистолет",
+            "3. Холодное",
+            "4. Специальное",
+            "5. Снайперка",
+            "6. Тяжёлое"
+        ])
+        self.fallback_weapon.setStyleSheet("font-size: 9px; padding: 2px;")
+        self.fallback_weapon.setToolTip("Запасное оружие, если в целевом нет патронов")
+        self.fallback_weapon.setFixedWidth(100)
+        layout.addWidget(self.fallback_weapon)
+        
+        # Галочка: Quick Switch (отмена анимации через нож)
+        self.quick_switch = QCheckBox("🔪 Quick Switch")
+        self.quick_switch.setChecked(False)
+        self.quick_switch.setStyleSheet("color: #4CAF50; font-size: 10px; font-weight: bold;")
+        self.quick_switch.setToolTip("Переключение через нож для отмены анимации доставания оружия")
+        layout.addWidget(self.quick_switch)
         
         # Количество повторений
         layout.addWidget(QLabel("Раз:"))
@@ -97,20 +124,41 @@ class SwapRule(QFrame):
             self.from_weapon.setCurrentIndex(rule_data['from'] - 1)
             self.to_weapon.setCurrentIndex(rule_data['to'] - 1)
             self.check_ammo.setChecked(rule_data.get('check_ammo', True))
+            self.quick_switch.setChecked(rule_data.get('quick_switch', False))
             self.repeat_count.setValue(rule_data.get('repeat_count', 1))
+            
+            # Fallback оружие (0 = нет fallback)
+            fallback_to = rule_data.get('fallback_to', 0)
+            self.fallback_weapon.setCurrentIndex(fallback_to)
+        
+        # Обновить видимость fallback при инициализации
+        self._on_check_ammo_toggled(self.check_ammo.isChecked())
     
     def _on_delete_clicked(self):
         if self.on_delete:
             self.on_delete(self)
     
+    def _on_check_ammo_toggled(self, checked):
+        """Показать/скрыть fallback в зависимости от check_ammo"""
+        self.fallback_label.setVisible(checked)
+        self.fallback_weapon.setVisible(checked)
+    
     def get_rule_data(self):
         """Получить данные правила"""
-        return {
+        rule = {
             'from': self.from_weapon.currentIndex() + 1,
             'to': self.to_weapon.currentIndex() + 1,
             'check_ammo': self.check_ammo.isChecked(),
+            'quick_switch': self.quick_switch.isChecked(),
             'repeat_count': self.repeat_count.value()
         }
+        
+        # Добавить fallback только если он выбран (не "—")
+        fallback_idx = self.fallback_weapon.currentIndex()
+        if fallback_idx > 0:  # 0 = "—" (нет fallback)
+            rule['fallback_to'] = fallback_idx
+        
+        return rule
 
 
 class MacroSettingsWindow(QDialog):
@@ -125,6 +173,7 @@ class MacroSettingsWindow(QDialog):
         
         self._init_ui()
         self._load_preset_list()
+        self._load_quick_switch_settings()
         
         logger.info("Окно настройки макросов открыто")
     
@@ -235,6 +284,66 @@ class MacroSettingsWindow(QDialog):
         
         return widget
     
+    def _create_quick_switch_panel(self) -> QGroupBox:
+        """Панель глобальных настроек Quick Switch"""
+        group = QGroupBox("🔪 Quick Switch - глобальные настройки")
+        group.setStyleSheet("""
+            QGroupBox {
+                background-color: #2a2a2a;
+                border: 2px solid #4CAF50;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding: 10px;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                color: #4CAF50;
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        group.setLayout(layout)
+        
+        # Описание
+        desc = QLabel("💡 Настройки применяются ко всем правилам с галочкой \"🔪 Quick Switch\"")
+        desc.setStyleSheet("color: #888; font-size: 9px; font-style: italic; margin-bottom: 5px;")
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+        
+        # Настройки
+        settings_layout = QHBoxLayout()
+        
+        # Слот ножа
+        settings_layout.addWidget(QLabel("Слот ножа:"))
+        self.qs_knife_slot = QSpinBox()
+        self.qs_knife_slot.setRange(1, 6)
+        self.qs_knife_slot.setValue(3)
+        self.qs_knife_slot.setFixedWidth(60)
+        self.qs_knife_slot.setStyleSheet("padding: 3px; background-color: #1e1e1e; border: 1px solid #444; border-radius: 2px;")
+        self.qs_knife_slot.setToolTip("На каком слоте находится нож (обычно 3)")
+        settings_layout.addWidget(self.qs_knife_slot)
+        
+        settings_layout.addSpacing(20)
+        
+        # Задержка
+        settings_layout.addWidget(QLabel("Задержка (мс):"))
+        self.qs_delay = QSpinBox()
+        self.qs_delay.setRange(30, 1000)
+        # Значение устанавливается в _load_quick_switch_settings() из конфига
+        self.qs_delay.setSingleStep(10)
+        self.qs_delay.setFixedWidth(80)
+        self.qs_delay.setStyleSheet("padding: 3px; background-color: #1e1e1e; border: 1px solid #444; border-radius: 2px;")
+        self.qs_delay.setToolTip("Время удержания ножа перед переключением на целевое оружие (50-100 мс оптимально, до 1000 мс если нужно)")
+        settings_layout.addWidget(self.qs_delay)
+        
+        settings_layout.addStretch()
+        layout.addLayout(settings_layout)
+        
+        return group
+    
     def _create_rules_panel(self) -> QWidget:
         """Панель с правилами свапа"""
         widget = QWidget()
@@ -252,6 +361,10 @@ class MacroSettingsWindow(QDialog):
         self.preset_name_label = QLabel("Выберите пресет")
         self.preset_name_label.setStyleSheet("color: #888; font-size: 10px;")
         layout.addWidget(self.preset_name_label)
+        
+        # Блок Quick Switch
+        qs_group = self._create_quick_switch_panel()
+        layout.addWidget(qs_group)
         
         # Контейнер для правил
         self.rules_container = QWidget()
@@ -333,6 +446,26 @@ class MacroSettingsWindow(QDialog):
         """Сохранить пресеты в конфиг"""
         if self.config_manager:
             self.config_manager.set('macros.presets', self.presets)
+            self.config_manager.save_user_config()
+    
+    def _load_quick_switch_settings(self):
+        """Загрузить настройки Quick Switch из конфига"""
+        if self.config_manager:
+            # Читаем из конфига (fallback на дефолтные значения из default_config.yaml)
+            knife_slot = self.config_manager.get('macros.knife_slot')
+            delay_ms = self.config_manager.get('macros.quick_switch_delay')
+            
+            # Устанавливаем значения в GUI (если None, оставляем как есть)
+            if knife_slot is not None:
+                self.qs_knife_slot.setValue(knife_slot)
+            if delay_ms is not None:
+                self.qs_delay.setValue(delay_ms)
+    
+    def _save_quick_switch_settings(self):
+        """Сохранить настройки Quick Switch в конфиг"""
+        if self.config_manager:
+            self.config_manager.set('macros.knife_slot', self.qs_knife_slot.value())
+            self.config_manager.set('macros.quick_switch_delay', self.qs_delay.value())
             self.config_manager.save_user_config()
     
     def _load_preset_list(self):
@@ -445,19 +578,30 @@ class MacroSettingsWindow(QDialog):
     
     def _on_save(self):
         """Сохранить изменения"""
-        if not self.current_preset:
-            QMessageBox.warning(self, "Ошибка", "Сначала выберите пресет!")
-            return
+        # Сохранить Quick Switch настройки (всегда)
+        self._save_quick_switch_settings()
         
-        # Собрать все правила
-        rules = []
-        for rule_widget in self.rule_widgets:
-            rules.append(rule_widget.get_rule_data())
-        
-        # Сохранить в пресет
-        self.presets[self.current_preset]['rules'] = rules
-        self._save_presets()
-        
-        QMessageBox.information(self, "Успех", "Пресет сохранён!")
-        logger.info(f"Пресет '{self.current_preset}' сохранён с {len(rules)} правилами")
+        # Сохранить правила текущего пресета (если выбран)
+        if self.current_preset:
+            # Собрать все правила
+            rules = []
+            for rule_widget in self.rule_widgets:
+                rules.append(rule_widget.get_rule_data())
+            
+            # Сохранить в пресет
+            self.presets[self.current_preset]['rules'] = rules
+            self._save_presets()
+            
+            # Подсчитываем правила с Quick Switch
+            qs_count = sum(1 for r in rules if r.get('quick_switch', False))
+            msg = f"Пресет '{self.current_preset}' сохранён ({len(rules)} правил"
+            if qs_count > 0:
+                msg += f", {qs_count} с Quick Switch"
+            msg += ")!"
+            
+            QMessageBox.information(self, "Успех", msg)
+            logger.info(f"Пресет '{self.current_preset}' сохранён: {len(rules)} правил, {qs_count} с Quick Switch")
+        else:
+            QMessageBox.information(self, "Успех", "Глобальные настройки Quick Switch сохранены!")
+            logger.info("Глобальные настройки Quick Switch сохранены")
 

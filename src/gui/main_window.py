@@ -89,6 +89,8 @@ class MainWindow(QMainWindow):
     macros_toggled = pyqtSignal(bool)
     preset_changed = pyqtSignal(str)
     trigger_toggled = pyqtSignal(bool)
+    auto_jump_toggled = pyqtSignal(bool)
+    auto_jump_settings_changed = pyqtSignal(int, int)  # (repeat_count, delay_ms)
     
     def __init__(self, config_manager):
         super().__init__()
@@ -245,6 +247,23 @@ class MainWindow(QMainWindow):
         self.macros_button.clicked.connect(self._on_macros_settings)
         buttons_layout.addWidget(self.macros_button)
         
+        # Кнопка настройки клавиш
+        self.keybindings_button = QPushButton("⌨️")
+        self.keybindings_button.setToolTip("Настройка клавиш оружия")
+        self.keybindings_button.setStyleSheet("""
+            QPushButton {
+                background-color: #00BCD4;
+                color: white;
+                padding: 8px 12px;
+                border: none;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #0097A7; }
+        """)
+        self.keybindings_button.clicked.connect(self._on_keybindings_settings)
+        buttons_layout.addWidget(self.keybindings_button)
+        
         buttons_layout.addStretch()
         
         buttons_layout.addWidget(QLabel("FPS:"))
@@ -338,6 +357,59 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(trigger_frame)
         
+        # Панель Auto Jump (BunnyHop)
+        auto_jump_frame = QFrame()
+        auto_jump_frame.setStyleSheet("background-color: #252525; border-radius: 3px;")
+        auto_jump_layout = QHBoxLayout()
+        auto_jump_layout.setContentsMargins(10, 5, 10, 5)
+        auto_jump_frame.setLayout(auto_jump_layout)
+        
+        auto_jump_layout.addWidget(QLabel("Auto Jump:"))
+        
+        # Переключатель вкл/выкл
+        self.auto_jump_enabled_checkbox = QCheckBox("Вкл")
+        default_auto_jump_enabled = self.config.get('auto_jump.enabled', False)
+        self.auto_jump_enabled_checkbox.setChecked(default_auto_jump_enabled)
+        self.auto_jump_enabled_checkbox.stateChanged.connect(self._on_auto_jump_toggled)
+        auto_jump_layout.addWidget(self.auto_jump_enabled_checkbox)
+        
+        # Статус
+        self.auto_jump_status_label = QLabel("Выключено")
+        self.auto_jump_status_label.setStyleSheet("color: #888; font-size: 10px;")
+        auto_jump_layout.addWidget(self.auto_jump_status_label)
+        
+        # Иконка
+        jump_icon = QLabel("🦘")
+        jump_icon.setStyleSheet("font-size: 14px;")
+        auto_jump_layout.addWidget(jump_icon)
+        
+        # Количество повторов
+        auto_jump_layout.addWidget(QLabel("Повторов:"))
+        self.auto_jump_repeat_spinbox = QSpinBox()
+        self.auto_jump_repeat_spinbox.setRange(1, 10)
+        self.auto_jump_repeat_spinbox.setValue(self.config.get('auto_jump.repeat_count', 2))
+        self.auto_jump_repeat_spinbox.setFixedWidth(50)
+        self.auto_jump_repeat_spinbox.setStyleSheet("padding: 3px; background-color: #2a2a2a; border: 1px solid #444; border-radius: 2px;")
+        self.auto_jump_repeat_spinbox.setToolTip("Количество повторных прыжков")
+        self.auto_jump_repeat_spinbox.valueChanged.connect(self._on_auto_jump_settings_changed)
+        auto_jump_layout.addWidget(self.auto_jump_repeat_spinbox)
+        
+        # Задержка
+        auto_jump_layout.addWidget(QLabel("Задержка:"))
+        self.auto_jump_delay_spinbox = QSpinBox()
+        self.auto_jump_delay_spinbox.setRange(10, 2000)
+        self.auto_jump_delay_spinbox.setValue(self.config.get('auto_jump.delay_ms', 100))
+        self.auto_jump_delay_spinbox.setSuffix(" мс")
+        self.auto_jump_delay_spinbox.setFixedWidth(90)
+        self.auto_jump_delay_spinbox.setStyleSheet("padding: 3px; background-color: #2a2a2a; border: 1px solid #444; border-radius: 2px;")
+        self.auto_jump_delay_spinbox.setToolTip("Задержка между прыжками")
+        self.auto_jump_delay_spinbox.valueChanged.connect(self._on_auto_jump_settings_changed)
+        auto_jump_layout.addWidget(self.auto_jump_delay_spinbox)
+        
+        auto_jump_layout.addStretch()
+        
+        layout.addWidget(auto_jump_frame)
+        
         # Лог
         log_label = QLabel("Логи:")
         log_label.setStyleSheet("font-size: 9px; color: #666;")
@@ -398,6 +470,12 @@ class MainWindow(QMainWindow):
         # Обновить список пресетов после закрытия окна
         self.reload_presets()
     
+    def _on_keybindings_settings(self):
+        """Открыть окно настройки клавиш оружия"""
+        from src.gui.keybindings_window import KeybindingsWindow
+        dialog = KeybindingsWindow(self, self.config)
+        dialog.exec()
+    
     def _on_macros_toggled(self, state):
         """Переключение макросов"""
         enabled = (state == 2)  # Qt.CheckState.Checked
@@ -437,35 +515,87 @@ class MainWindow(QMainWindow):
         
         self._save_settings()
     
+    def _on_auto_jump_toggled(self, state):
+        """Переключение Auto Jump"""
+        enabled = (state == 2)  # Qt.CheckState.Checked
+        self.auto_jump_toggled.emit(enabled)
+        
+        if enabled:
+            self.auto_jump_status_label.setText("АКТИВЕН")
+            self.auto_jump_status_label.setStyleSheet("color: #4CAF50; font-size: 10px; font-weight: bold;")
+            self.add_log("🦘 Auto Jump включен")
+        else:
+            self.auto_jump_status_label.setText("Выключено")
+            self.auto_jump_status_label.setStyleSheet("color: #888; font-size: 10px;")
+            self.add_log("⏸ Auto Jump выключен")
+        
+        self._save_settings()
+    
+    def _on_auto_jump_settings_changed(self):
+        """Изменение настроек Auto Jump"""
+        repeat_count = self.auto_jump_repeat_spinbox.value()
+        delay_ms = self.auto_jump_delay_spinbox.value()
+        
+        # Сохраняем в конфиг
+        self.config.set('auto_jump.repeat_count', repeat_count)
+        self.config.set('auto_jump.delay_ms', delay_ms)
+        self._save_settings()
+        
+        # Эмитируем сигнал для обновления в реальном времени
+        self.auto_jump_settings_changed.emit(repeat_count, delay_ms)
+    
     def reload_presets(self):
         """Перезагрузить список пресетов"""
         current = self.preset_combo.currentText()
+        
+        # Блокируем сигналы чтобы не вызывался _on_preset_changed при заполнении
+        self.preset_combo.blockSignals(True)
         self.preset_combo.clear()
         
         presets = self.config.get('macros.presets', {})
         for preset_name in presets.keys():
             self.preset_combo.addItem(preset_name)
         
-        # Восстановить выбор если возможно
-        if current:
-            index = self.preset_combo.findText(current)
+        # Восстановить выбор
+        # Сначала пробуем текущий выбранный
+        preset_to_select = current
+        
+        # Если пусто (первый запуск) - берём последний сохранённый
+        if not preset_to_select:
+            preset_to_select = self.config.get('gui.last_preset')
+        
+        # Устанавливаем если нашли
+        if preset_to_select:
+            index = self.preset_combo.findText(preset_to_select)
             if index >= 0:
                 self.preset_combo.setCurrentIndex(index)
+                logger.info(f"Пресет восстановлен: {preset_to_select}")
+        
+        # Разблокируем сигналы
+        self.preset_combo.blockSignals(False)
+        
+        # ВАЖНО: После разблокировки вручную эмитируем сигнал 
+        # чтобы macro_engine знал какой пресет выбран
+        current_preset = self.preset_combo.currentText()
+        if current_preset:
+            self.preset_changed.emit(current_preset)
     
     def _save_settings(self):
         """Сохранить настройки в user_settings"""
         fps = self.fps_spinbox.value()
         macros = self.macros_enabled_checkbox.isChecked()
         trigger = self.trigger_enabled_checkbox.isChecked()
+        auto_jump = self.auto_jump_enabled_checkbox.isChecked()
         preset = self.preset_combo.currentText()
         
         self.config.set('gui.last_update_rate', fps)
         self.config.set('gui.macros_enabled', macros)
         self.config.set('gui.trigger_enabled', trigger)
+        self.config.set('gui.auto_jump_enabled', auto_jump)
         self.config.set('gui.last_preset', preset)
         self.config.save_user_config()
         
-        logger.debug(f"Сохранены настройки: FPS={fps}, Макросы={macros}, Триггер={trigger}, Пресет={preset}")
+        logger.debug(f"Сохранены настройки: FPS={fps}, Макросы={macros}, Триггер={trigger}, AutoJump={auto_jump}, Пресет={preset}")
     
     def _load_settings(self):
         """Загрузить сохранённые настройки"""
@@ -477,15 +607,7 @@ class MainWindow(QMainWindow):
             self.fps_spinbox.blockSignals(False)
             logger.info(f"Загружен FPS: {saved_fps}")
         
-        # Пресет (загружаем до макросов!)
-        last_preset = self.config.get('gui.last_preset')
-        if last_preset:
-            index = self.preset_combo.findText(last_preset)
-            if index >= 0:
-                self.preset_combo.blockSignals(True)  # Блокируем сигналы
-                self.preset_combo.setCurrentIndex(index)
-                self.preset_combo.blockSignals(False)
-                logger.info(f"Загружен пресет: {last_preset}")
+        # Пресет уже загружен в reload_presets(), не дублируем
         
         macros_enabled = self.config.get('gui.macros_enabled')
         if macros_enabled is None:
@@ -529,6 +651,28 @@ class MainWindow(QMainWindow):
         
         # Эмитируем сигнал для применения настроек триггера
         self.trigger_toggled.emit(trigger_enabled)
+        
+        # Auto Jump
+        auto_jump_enabled = self.config.get('gui.auto_jump_enabled')
+        if auto_jump_enabled is None:
+            auto_jump_enabled = self.config.get('auto_jump.enabled', False)
+        
+        self.auto_jump_enabled_checkbox.blockSignals(True)
+        self.auto_jump_enabled_checkbox.setChecked(auto_jump_enabled)
+        self.auto_jump_enabled_checkbox.blockSignals(False)
+        
+        # Обновляем визуальный статус
+        if auto_jump_enabled:
+            self.auto_jump_status_label.setText("АКТИВЕН")
+            self.auto_jump_status_label.setStyleSheet("color: #4CAF50; font-size: 10px; font-weight: bold;")
+        else:
+            self.auto_jump_status_label.setText("Выключено")
+            self.auto_jump_status_label.setStyleSheet("color: #888; font-size: 10px;")
+        
+        logger.info(f"Загружено состояние Auto Jump: {auto_jump_enabled}")
+        
+        # Эмитируем сигнал для применения настроек Auto Jump
+        self.auto_jump_toggled.emit(auto_jump_enabled)
     
     def update_weapon_ammo(self, weapon_id: int, clip: int, reserve: int):
         if weapon_id in self.weapon_rows:

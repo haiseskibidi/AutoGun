@@ -31,16 +31,6 @@ class MacroEngine:
         # Формат: {weapon_id: {'current_rule_idx': 0, 'counter': 0}}
         self.rule_rotation = {}
         
-        # Координаты слотов оружия для клика
-        self.weapon_keys = {
-            1: '1',
-            2: '2', 
-            3: '3',
-            4: '4',
-            5: '5',
-            6: '6'
-        }
-        
         logger.info("MacroEngine инициализирован")
     
     def load_presets(self):
@@ -183,7 +173,11 @@ class MacroEngine:
         check_ammo = current_rule.get('check_ammo', True)
         quick_switch = current_rule.get('quick_switch', False)
         fallback_to = current_rule.get('fallback_to', 0)  # 0 = нет fallback
+        fallback_quick_switch = current_rule.get('fallback_quick_switch', False)
         repeat_count = current_rule.get('repeat_count', 1)
+        
+        # Флаг: используется ли fallback
+        using_fallback = False
         
         # Проверяем патроны если нужно
         if check_ammo and not self._has_ammo(to_weapon):
@@ -191,6 +185,9 @@ class MacroEngine:
             if fallback_to > 0:
                 logger.info(f"У оружия {to_weapon} нет патронов → fallback на {fallback_to}")
                 to_weapon = fallback_to
+                quick_switch = fallback_quick_switch  # Используем настройку QS для fallback!
+                using_fallback = True
+                
                 # Для fallback тоже проверяем патроны
                 if not self._has_ammo(to_weapon):
                     logger.debug(f"Свап отменён: у fallback оружия {to_weapon} тоже нет патронов")
@@ -206,7 +203,8 @@ class MacroEngine:
         
         # Выполняем свап
         qs_marker = "🔪" if quick_switch else ""
-        logger.info(f"Свап: {from_weapon} → {to_weapon} {qs_marker}(правило {rotation['current_rule_idx'] + 1}/{len(matching_rules)}, выстрел {rotation['counter'] + 1}/{repeat_count})")
+        fallback_marker = " [FALLBACK]" if using_fallback else ""
+        logger.info(f"Свап: {from_weapon} → {to_weapon} {qs_marker}{fallback_marker}(правило {rotation['current_rule_idx'] + 1}/{len(matching_rules)}, выстрел {rotation['counter'] + 1}/{repeat_count})")
         self._switch_weapon(to_weapon, use_quick_switch=quick_switch)
         
         # Увеличиваем счётчик
@@ -234,6 +232,18 @@ class MacroEngine:
         # Проверяем ТОЛЬКО обойму (не запас!)
         return clip > 0
     
+    def _get_weapon_key(self, weapon_id: int) -> str:
+        """
+        Получить клавишу для слота оружия из конфига
+        
+        Args:
+            weapon_id: ID оружия (1-6)
+            
+        Returns:
+            Клавиша для переключения на это оружие
+        """
+        return self.config.get(f'keybindings.weapon_slot_{weapon_id}', str(weapon_id))
+    
     def _switch_weapon(self, weapon_id: int, use_quick_switch: bool = False):
         """
         Переключить оружие (с quick switch если указано в правиле)
@@ -242,7 +252,7 @@ class MacroEngine:
             weapon_id: ID оружия (1-6)
             use_quick_switch: Использовать quick switch для этого свапа
         """
-        if weapon_id not in self.weapon_keys:
+        if weapon_id < 1 or weapon_id > 6:
             logger.warning(f"Некорректный ID оружия: {weapon_id}")
             return
         
@@ -255,7 +265,7 @@ class MacroEngine:
             # Quick Switch: нож → целевое оружие (только если включено для этого правила)
             if use_quick_switch and weapon_id != knife_slot:
                 # Шаг 1: Переключаемся на нож
-                knife_key = self.weapon_keys.get(knife_slot)
+                knife_key = self._get_weapon_key(knife_slot)
                 if knife_key:
                     keyboard.send(knife_key)
                     logger.debug(f"🔪 Quick switch: нож ({knife_slot})")
@@ -264,7 +274,7 @@ class MacroEngine:
                     time.sleep(delay_ms / 1000.0)
             
             # Шаг 2: Переключаемся на целевое оружие
-            key = self.weapon_keys[weapon_id]
+            key = self._get_weapon_key(weapon_id)
             keyboard.send(key)
             logger.debug(f"Нажата клавиша: {key}")
             

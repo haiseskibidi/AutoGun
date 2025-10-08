@@ -16,6 +16,7 @@ from src.core.memory_reader import MemoryReader
 from src.core.weapon_category_detector import WeaponCategoryDetector
 from src.core.macro_engine import MacroEngine
 from src.core.trigger_bot import TriggerBot
+from src.core.auto_jump import AutoJump
 from src.gui.main_window import MainWindow
 
 
@@ -48,6 +49,7 @@ class AmmoTracker:
         self.weapon_detector = WeaponCategoryDetector()
         self.macro_engine = MacroEngine(self.config)
         self.trigger_bot = TriggerBot(self.memory_reader)
+        self.auto_jump = AutoJump(self.config)
         
         # Загрузка оффсетов из конфига
         offsets = self.config.get('memory_reading.offsets', {})
@@ -88,6 +90,8 @@ class AmmoTracker:
         self.main_window.macros_toggled.connect(self.on_macros_toggled)
         self.main_window.preset_changed.connect(self.on_preset_changed)
         self.main_window.trigger_toggled.connect(self.on_trigger_toggled)
+        self.main_window.auto_jump_toggled.connect(self.on_auto_jump_toggled)
+        self.main_window.auto_jump_settings_changed.connect(self.on_auto_jump_settings_changed)
         
         # Таймер обновления
         self.update_timer = QTimer()
@@ -173,6 +177,9 @@ class AmmoTracker:
             # Обновляем триггер-бот
             self.trigger_bot.update()
             
+            # Обновляем Auto Jump
+            self.auto_jump.update()
+            
             # Обновление FPS
             self.fps_counter += 1
             current_time = time.time()
@@ -254,6 +261,25 @@ class AmmoTracker:
         else:
             self.trigger_bot.disable()
             self.logger.info("Триггер-бот выключен")
+    
+    def on_auto_jump_toggled(self, enabled: bool):
+        """Обработчик вкл/выкл Auto Jump"""
+        if enabled:
+            if self.auto_jump.enable():
+                self.logger.info(f"Auto Jump включен: {self.auto_jump.get_status()}")
+                self.main_window.add_log("🦘 Auto Jump активирован")
+            else:
+                self.main_window.add_log("❌ Не удалось найти окно игры")
+                self.main_window.auto_jump_enabled_checkbox.setChecked(False)
+        else:
+            self.auto_jump.disable()
+            self.logger.info("Auto Jump выключен")
+    
+    def on_auto_jump_settings_changed(self, repeat_count: int, delay_ms: int):
+        """Обработчик изменения настроек Auto Jump"""
+        self.auto_jump.set_repeat_count(repeat_count)
+        self.auto_jump.set_delay(delay_ms)
+        self.logger.info(f"Auto Jump настройки обновлены: x{repeat_count}, {delay_ms}мс")
     
     def run(self):
         """Запуск приложения"""

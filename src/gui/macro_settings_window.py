@@ -86,6 +86,13 @@ class SwapRule(QFrame):
         self.fallback_weapon.setFixedWidth(100)
         layout.addWidget(self.fallback_weapon)
         
+        # Галочка: Quick Switch для fallback
+        self.fallback_quick_switch = QCheckBox("🔪")
+        self.fallback_quick_switch.setChecked(False)
+        self.fallback_quick_switch.setStyleSheet("color: #4CAF50; font-size: 9px; font-weight: bold;")
+        self.fallback_quick_switch.setToolTip("Quick Switch для fallback оружия")
+        layout.addWidget(self.fallback_quick_switch)
+        
         # Галочка: Quick Switch (отмена анимации через нож)
         self.quick_switch = QCheckBox("🔪 Quick Switch")
         self.quick_switch.setChecked(False)
@@ -130,6 +137,7 @@ class SwapRule(QFrame):
             # Fallback оружие (0 = нет fallback)
             fallback_to = rule_data.get('fallback_to', 0)
             self.fallback_weapon.setCurrentIndex(fallback_to)
+            self.fallback_quick_switch.setChecked(rule_data.get('fallback_quick_switch', False))
         
         # Обновить видимость fallback при инициализации
         self._on_check_ammo_toggled(self.check_ammo.isChecked())
@@ -142,6 +150,7 @@ class SwapRule(QFrame):
         """Показать/скрыть fallback в зависимости от check_ammo"""
         self.fallback_label.setVisible(checked)
         self.fallback_weapon.setVisible(checked)
+        self.fallback_quick_switch.setVisible(checked)
     
     def get_rule_data(self):
         """Получить данные правила"""
@@ -157,6 +166,7 @@ class SwapRule(QFrame):
         fallback_idx = self.fallback_weapon.currentIndex()
         if fallback_idx > 0:  # 0 = "—" (нет fallback)
             rule['fallback_to'] = fallback_idx
+            rule['fallback_quick_switch'] = self.fallback_quick_switch.isChecked()
         
         return rule
 

@@ -50,9 +50,9 @@ class MemoryReader:
             'slot_1_reserve': None,     # Оффсет для запаса
             'slot_offset': None,        # Размер структуры одного слота
             'active_weapon': None,      # Оффсет активного оружия (1-6)
-            # Триггер: Player_move_c (bool флаг на +0x137C)
-            'player_move_c': None,      # Базовый адрес для триггера
-            'player_offsets': []        # Цепочка указателей к Player_move_c
+            # Триггер: Цвет прицела (UISprite.mColor)
+            'crosshair_controller': None,  # Базовый адрес AimCrosshairController
+            'crosshair_offsets': []        # Цепочка указателей к AimCrosshairController
         }
         
         # Кэш данных
@@ -327,58 +327,117 @@ class MemoryReader:
         """Получение кэшированных патронов"""
         return self.ammo_cache.get(slot_id)
     
-    def read_crosshair_on_enemy(self) -> bool:
+    def read_crosshair_on_enemy(self, debug_mode: bool = False) -> bool:
         """
-        Проверить наведён ли прицел на врага через bool флаг на +0x137C
+        Проверить наведён ли прицел на врага через ЦВЕТ прицела
         
-        НОВЫЙ ПУТЬ: GameAssembly+05956E58 → [B8] → [B0] → [B0] → [D0] → [48] → [0] → Player_move_c
-        Читаем БАЙТ на Player_move_c + 0x137C (0 = мимо, 1 = на враге)
+        ПУТЬ: GameAssembly → AimCrosshairController → aimCenterSprite (+0x38) → mColor (+0x94)
+        Читаем FLOAT зелёного канала (G):
+        - Если G ≈ 1.0 → прицел БЕЛЫЙ → мимо
+        - Если G ≈ 0.0 → прицел КРАСНЫЙ → на враге
+        
+        Args:
+            debug_mode: Включить детальное логирование цепочки указателей
         
         Returns:
             True если прицел на враге, False иначе
         """
         if not self.is_connected():
+            if debug_mode:
+                logger.error("[TRIGGER DEBUG] ❌ Не подключено к процессу")
             return False
         
         # Проверяем наличие оффсетов
-        if 'player_move_c' not in self.offsets or self.offsets['player_move_c'] is None:
-            logger.debug("[TRIGGER] player_move_c не установлен в конфиге")
+        if 'crosshair_controller' not in self.offsets or self.offsets['crosshair_controller'] is None:
+            if debug_mode:
+                logger.error("[TRIGGER DEBUG] ❌ crosshair_controller не установлен в конфиге")
             return False
         
         try:
             # Начинаем с базового адреса
-            base_offset = self.offsets['player_move_c']
+            base_offset = self.offsets['crosshair_controller']
             address = self.module_base + base_offset
             
+            if debug_mode:
+                logger.info("[TRIGGER DEBUG] ═══════════════════════════════════════════")
+                logger.info(f"[TRIGGER DEBUG] 🎨 ПРОВЕРКА ЦВЕТА ПРИЦЕЛА")
+                logger.info(f"[TRIGGER DEBUG] GameAssembly.dll база: 0x{self.module_base:X}")
+                logger.info(f"[TRIGGER DEBUG] Базовый оффсет: 0x{base_offset:X}")
+                logger.info(f"[TRIGGER DEBUG] Шаг 0 (начало): 0x{address:X}")
+            
             # Идём по цепочке указателей
-            for offset in self.offsets.get('player_offsets', []):
+            # ВСЕ оффсеты кроме последнего - разыменовываем (читаем указатель)
+            # Последний оффсет - просто прибавляем (до Green канала)
+            crosshair_offsets = self.offsets.get('crosshair_offsets', [])
+            
+            for i, offset in enumerate(crosshair_offsets):
+                # Читаем указатель
+                prev_address = address
                 address = self.read_pointer(address)
+                
+                if debug_mode:
+                    if address is None:
+                        logger.error(f"[TRIGGER DEBUG] ❌ Шаг {i+1}: не удалось прочитать указатель по 0x{prev_address:X}")
+                        return False
+                    elif address == 0:
+                        logger.error(f"[TRIGGER DEBUG] ❌ Шаг {i+1}: указатель = NULL (0x0)")
+                        return False
+                    else:
+                        logger.info(f"[TRIGGER DEBUG] ✅ Шаг {i+1}: [0x{prev_address:X}] → 0x{address:X}, затем +0x{offset:X}")
+                
                 if address is None or address == 0:
                     return False
+                
+                # Прибавляем оффсет
                 address += offset
+                
+                if debug_mode:
+                    logger.info(f"[TRIGGER DEBUG]         → Итого: 0x{address:X}")
             
-            # Читаем флаг на +0x137C (это БАЙТ: 0 или 1)
-            flag_address = address + 0x137C
-            flag_value = self.read_byte(flag_address)
+            # Финальный адрес - это UISprite (после всех оффсетов)
+            if debug_mode:
+                logger.info(f"[TRIGGER DEBUG] ✅ Адрес Green канала: 0x{address:X}")
             
-            if flag_value is None:
+            # Читаем Green канал напрямую
+            green_value = self.read_float(address)
+            
+            if debug_mode:
+                if green_value is None:
+                    logger.error(f"[TRIGGER DEBUG] ❌ Не удалось прочитать Green по 0x{address:X}")
+                else:
+                    # Читаем и другие каналы для полной картины
+                    r = self.read_float(address - 0x4)  # R на -4 от G
+                    g = green_value
+                    b = self.read_float(address + 0x4)  # B на +4 от G
+                    a = self.read_float(address + 0x8)  # A на +8 от G
+                    logger.info(f"[TRIGGER DEBUG] Цвет прицела: R={r:.2f}, G={g:.2f}, B={b:.2f}, A={a:.2f}")
+            
+            if green_value is None:
                 return False
             
-            # Флаг = 1 если на враге, 0 если мимо
-            is_on_enemy = (flag_value == 1)
+            # Если G < 0.5 → красный → на враге
+            # Если G > 0.5 → белый → мимо
+            is_on_enemy = (green_value < 0.5)
             
             # Логируем только изменения состояния
             if is_on_enemy != self.last_target_state:
                 if is_on_enemy:
-                    logger.info(f"[TRIGGER] 🎯 Прицел на враге!")
+                    logger.info(f"[TRIGGER] 🎯 Прицел КРАСНЫЙ - враг обнаружен!")
                 else:
-                    logger.info(f"[TRIGGER] Цель потеряна")
+                    logger.info(f"[TRIGGER] Прицел БЕЛЫЙ - цель потеряна")
                 self.last_target_state = is_on_enemy
+            
+            if debug_mode:
+                logger.info(f"[TRIGGER DEBUG] Результат: {'🔴 КРАСНЫЙ (на враге)' if is_on_enemy else '⚪ БЕЛЫЙ (мимо)'}")
+                logger.info("[TRIGGER DEBUG] ═══════════════════════════════════════════")
             
             return is_on_enemy
         
         except Exception as e:
-            logger.debug(f"[TRIGGER] Ошибка чтения флага: {e}")
+            if debug_mode:
+                logger.error(f"[TRIGGER DEBUG] ❌ ОШИБКА: {e}")
+            else:
+                logger.debug(f"[TRIGGER] Ошибка чтения цвета: {e}")
             return False
     
     def update_all(self) -> Dict:

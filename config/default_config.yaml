@@ -21,13 +21,12 @@ memory_reading:
     slot_offset: 0x10                   # ✅ Размер слота = 16 байт (НАЙДЕНО!)
     active_weapon: null                 # Оффсет активного оружия (опционально)
     
-    # Триггер: Player_move_c (найден через Pointer Scan!)
-    # Цепочка: "GameAssembly.dll"+05956E58 → B8 → B0 → B0 → D0 → 48 → 0 → myPlayerMoveC
-    player_move_c: 0x05956E58           # ✅ Базовый адрес
-    player_offsets: [0xB8, 0xB0, 0xB0, 0xD0, 0x48, 0x0]  # ✅ Цепочка указателей
-    # В Player_move_c:
-    #   +0x137C = bool флаг "прицел на враге" (0/1)
-    #   +0x1380 = Player_move_c* указатель на врага
+    # Триггер: Цвет прицела (AimCrosshairController)
+    # Нужно найти через Pointer Scan (см. инструкцию)
+    crosshair_controller: null          # Базовый адрес AimCrosshairController
+    crosshair_offsets: []               # Цепочка указателей к AimCrosshairController
+    # Путь: AimCrosshairController → aimCenterSprite (+0x38) → mColor (+0x94)
+    # Читаем GREEN канал (+0x4): если < 0.5 = красный (на враге), если > 0.5 = белый (мимо)
 
 # Настройки триггер-бота
 trigger:

@@ -41,6 +41,7 @@ class TriggerBot:
         # Состояние
         self.last_state = False  # Был ли враг в прошлом кадре
         self.is_holding = False  # Зажата ли кнопка мыши
+        self.first_check = True  # Флаг первой проверки (для debug лога)
         
         logger.info("TriggerBot инициализирован")
     
@@ -88,8 +89,14 @@ class TriggerBot:
             return
         
         try:
+            # При первой проверке - выводим детальный лог
+            debug_mode = self.first_check
+            if self.first_check:
+                logger.info("[TRIGGER] 🔍 Первая проверка - включаем детальное логирование")
+                self.first_check = False
+            
             # Проверяем наведён ли прицел на врага
-            is_on_enemy = self.memory_reader.read_crosshair_on_enemy()
+            is_on_enemy = self.memory_reader.read_crosshair_on_enemy(debug_mode=debug_mode)
             
             # Логируем изменения состояния
             if is_on_enemy != self.last_state:
